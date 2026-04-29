@@ -17,21 +17,30 @@ enum CycleType {
 }
 
 class PomodoroTimer extends ChangeNotifier {
+
+  // ── Settings ─────────────────────────────────────────────────
   int workMinutes;
   int shortBreakMinutes;
   int longBreakMinutes;
   int sessionsUntilLongBreak;
   bool autoStart;
 
+  // ── Overtime stats ───────────────────────────────────────────
+  Duration totalWorkOvertime;
+  Duration totalBreakOvertime;
+
+  // ── Private state ────────────────────────────────────────────
   CycleType _currentCycle = CycleType.work;
   bool _isRunning = false;
   int _completedSessions = 0;
   Duration _timeRemaining;
   Duration _totalDuration;
+  bool _isOvertime = false;
+  Duration _overtimeElapsed = Duration.zero;
 
   Timer? _ticker;
-  DateTime? _startDate;
-  Duration _timeOnStart = Duration.zero;
+  DateTime? _cycleEndDate;  // absolute moment the cycle should end
+  DateTime? _pauseDate;     // moment we paused (null when running)
 
   void Function(CycleType next)? onCycleComplete;
 
@@ -41,24 +50,38 @@ class PomodoroTimer extends ChangeNotifier {
     this.longBreakMinutes = 15,
     this.sessionsUntilLongBreak = 4,
     this.autoStart = false,
-  })  : _timeRemaining = Duration(minutes: 25),
-        _totalDuration = Duration(minutes: 25);
+    this.totalWorkOvertime = Duration.zero,
+    this.totalBreakOvertime = Duration.zero,
+  })  : _timeRemaining = const Duration(minutes: 25),
+        _totalDuration = const Duration(minutes: 25);
 
   // ── Getters ──────────────────────────────────────────────────
 
-  CycleType get currentCycle        => _currentCycle;
-  bool      get isRunning           => _isRunning;
-  int       get completedSessions   => _completedSessions;
+  CycleType get currentCycle      => _currentCycle;
+  bool      get isRunning         => _isRunning;
+  int       get completedSessions => _completedSessions;
+  bool      get isOvertime        => _isOvertime;
+  Duration  get overtimeElapsed   => _overtimeElapsed;
 
   double get progress {
+    if (_isOvertime) return 0.0;
     final total = _totalDuration.inMilliseconds;
-    return total == 0 ? 1.0 : _timeRemaining.inMilliseconds / total;
+    return total == 0 ? 1.0 : (_timeRemaining.inMilliseconds / total).clamp(0.0, 1.0);
   }
 
   String get formattedTime {
+    if (_isOvertime) {
+      final s = _overtimeElapsed.inSeconds;
+      return '+${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
+    }
     final m = _timeRemaining.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = _timeRemaining.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$m:$s';
+  }
+
+  int get filledDots {
+    if (sessionsUntilLongBreak == 0) return 0;
+    return _completedSessions % sessionsUntilLongBreak;
   }
 
   Duration get _cycleDuration {
@@ -69,9 +92,17 @@ class PomodoroTimer extends ChangeNotifier {
     }
   }
 
-  int get filledDots {
-    if (sessionsUntilLongBreak == 0) return 0;
-    return _completedSessions % sessionsUntilLongBreak;
+  // Preview the next cycle without mutating state (used for notification on overtime entry)
+  CycleType get _peekNextCycle {
+    switch (_currentCycle) {
+      case CycleType.work:
+        if (sessionsUntilLongBreak == 0) return CycleType.shortBreak;
+        final next = _completedSessions + 1;
+        return (next % sessionsUntilLongBreak == 0) ? CycleType.longBreak : CycleType.shortBreak;
+      case CycleType.shortBreak:
+      case CycleType.longBreak:
+        return CycleType.work;
+    }
   }
 
   // ── Factory ──────────────────────────────────────────────────
@@ -79,11 +110,13 @@ class PomodoroTimer extends ChangeNotifier {
   static Future<PomodoroTimer> load() async {
     final p = await SharedPreferences.getInstance();
     return PomodoroTimer(
-      workMinutes:           p.getInt('workMinutes')           ?? 25,
-      shortBreakMinutes:     p.getInt('shortBreakMinutes')     ?? 5,
-      longBreakMinutes:      p.getInt('longBreakMinutes')      ?? 15,
-      sessionsUntilLongBreak: p.getInt('sessionsUntilLongBreak') ?? 4,
-      autoStart:             p.getBool('autoStart')            ?? false,
+      workMinutes:            p.getInt('workMinutes')              ?? 25,
+      shortBreakMinutes:      p.getInt('shortBreakMinutes')        ?? 5,
+      longBreakMinutes:       p.getInt('longBreakMinutes')         ?? 15,
+      sessionsUntilLongBreak: p.getInt('sessionsUntilLongBreak')   ?? 4,
+      autoStart:              p.getBool('autoStart')               ?? false,
+      totalWorkOvertime:      Duration(seconds: p.getInt('totalWorkOvertimeSecs')  ?? 0),
+      totalBreakOvertime:     Duration(seconds: p.getInt('totalBreakOvertimeSecs') ?? 0),
     );
   }
 
@@ -94,6 +127,8 @@ class PomodoroTimer extends ChangeNotifier {
     await p.setInt('longBreakMinutes', longBreakMinutes);
     await p.setInt('sessionsUntilLongBreak', sessionsUntilLongBreak);
     await p.setBool('autoStart', autoStart);
+    await p.setInt('totalWorkOvertimeSecs',  totalWorkOvertime.inSeconds);
+    await p.setInt('totalBreakOvertimeSecs', totalBreakOvertime.inSeconds);
   }
 
   // ── Controls ─────────────────────────────────────────────────
@@ -102,39 +137,72 @@ class PomodoroTimer extends ChangeNotifier {
 
   void start() {
     if (_isRunning) return;
-    _timeOnStart = _timeRemaining;
-    _startDate   = DateTime.now();
-    _isRunning   = true;
-    _ticker = Timer.periodic(
-      const Duration(milliseconds: 500),
-      (_) => _tick(),
-    );
+
+    final now = DateTime.now();
+    if (_pauseDate != null && _cycleEndDate != null) {
+      // Resume: shift the end date forward by the time we were paused.
+      // Works correctly both in normal mode and in overtime (cycleEndDate stays in the past,
+      // and the shift keeps the overtime duration where we left off).
+      final pausedFor = now.difference(_pauseDate!);
+      _cycleEndDate = _cycleEndDate!.add(pausedFor);
+      _pauseDate = null;
+    } else {
+      // Fresh start
+      _pauseDate = null;
+      _cycleEndDate = now.add(_timeRemaining);
+    }
+
+    _isRunning = true;
+    _ticker = Timer.periodic(const Duration(milliseconds: 500), (_) => _tick());
     notifyListeners();
   }
 
   void pause() {
+    if (!_isRunning) return;
     _isRunning = false;
-    _startDate = null;
+    _pauseDate = DateTime.now();
     _ticker?.cancel();
     _ticker = null;
     notifyListeners();
   }
 
   void reset() {
-    pause();
+    _isRunning = false;
+    _ticker?.cancel();
+    _ticker = null;
+    _cycleEndDate = null;
+    _pauseDate = null;
+    _isOvertime = false;
+    _overtimeElapsed = Duration.zero;
     _timeRemaining = _cycleDuration;
     _totalDuration = _cycleDuration;
     notifyListeners();
   }
 
   void skip() {
-    pause();
-    _advance(countSession: false);
+    // Count the session only if the timer reached 0 naturally (overtime was active)
+    final shouldCount = _isOvertime && _currentCycle == CycleType.work;
+    _accumulateOvertime();
+
+    _isRunning = false;
+    _ticker?.cancel();
+    _ticker = null;
+    _cycleEndDate = null;
+    _pauseDate = null;
+    _isOvertime = false;
+    _overtimeElapsed = Duration.zero;
+
+    _advance(countSession: shouldCount);
+    if (autoStart) start();
   }
 
   void applySettings() {
     saveSettings();
     if (!_isRunning) {
+      _cycleEndDate = null;
+      _pauseDate = null;
+      _isOvertime = false;
+      _overtimeElapsed = Duration.zero;
       _timeRemaining = _cycleDuration;
       _totalDuration = _cycleDuration;
       notifyListeners();
@@ -144,25 +212,26 @@ class PomodoroTimer extends ChangeNotifier {
   // ── Private ──────────────────────────────────────────────────
 
   void _tick() {
-    if (_startDate == null) return;
-    final elapsed   = DateTime.now().difference(_startDate!);
-    final remaining = _timeOnStart - elapsed;
+    if (_cycleEndDate == null) return;
 
-    if (remaining <= Duration.zero) {
-      _timeRemaining = Duration.zero;
+    // diff > 0: time still remaining. diff < 0: we're in overtime.
+    final diff = _cycleEndDate!.difference(DateTime.now());
+
+    if (diff > Duration.zero) {
+      _timeRemaining = diff;
       notifyListeners();
-      _completeCycle();
     } else {
-      _timeRemaining = remaining;
+      _timeRemaining = Duration.zero;
+      final elapsed = Duration(microseconds: diff.inMicroseconds.abs());
+
+      if (!_isOvertime) {
+        // First tick past 0 — enter overtime
+        _isOvertime = true;
+        onCycleComplete?.call(_peekNextCycle);
+      }
+      _overtimeElapsed = elapsed;
       notifyListeners();
     }
-  }
-
-  void _completeCycle() {
-    pause();
-    _advance(countSession: _currentCycle == CycleType.work);
-    onCycleComplete?.call(_currentCycle); // currentCycle is now the next one
-    if (autoStart) start();
   }
 
   void _advance({required bool countSession}) {
@@ -179,6 +248,17 @@ class PomodoroTimer extends ChangeNotifier {
     _totalDuration = _cycleDuration;
     _timeRemaining = _cycleDuration;
     notifyListeners();
+  }
+
+  // Add current overtime to the running total before clearing it.
+  void _accumulateOvertime() {
+    if (!_isOvertime || _overtimeElapsed == Duration.zero) return;
+    if (_currentCycle == CycleType.work) {
+      totalWorkOvertime += _overtimeElapsed;
+    } else {
+      totalBreakOvertime += _overtimeElapsed;
+    }
+    saveSettings(); // fire-and-forget; persists updated stats
   }
 
   @override

@@ -89,7 +89,7 @@ struct TimerRingView: View {
 
             Text(pomodoro.formattedTime)
                 .font(.system(size: 50, weight: .thin, design: .monospaced))
-                .foregroundStyle(Color.wineDark)
+                .foregroundStyle(pomodoro.isOvertime ? Color.wineMid : Color.wineDark)
                 .contentTransition(.numericText())
         }
         .frame(width: 188, height: 188)

@@ -10,11 +10,18 @@ enum CycleType: String {
 
 @MainActor
 final class PomodoroTimer: ObservableObject {
+
+    // MARK: - Published state
+
     @Published var timeRemaining: TimeInterval
     @Published var currentCycle: CycleType = .work
     @Published var isRunning = false
     @Published var completedSessions = 0
     @Published var progress: Double = 1.0
+    @Published var isOvertime = false
+    @Published var overtimeSeconds: TimeInterval = 0
+
+    // MARK: - Settings (auto-persisted via didSet)
 
     @Published var workDuration: TimeInterval {
         didSet { UserDefaults.standard.set(workDuration, forKey: "workDuration") }
@@ -32,27 +39,46 @@ final class PomodoroTimer: ObservableObject {
         didSet { UserDefaults.standard.set(autoStart, forKey: "autoStart") }
     }
 
+    // MARK: - Overtime stats (auto-persisted via didSet)
+
+    @Published var totalWorkOvertime: TimeInterval {
+        didSet { UserDefaults.standard.set(totalWorkOvertime, forKey: "totalWorkOvertime") }
+    }
+    @Published var totalBreakOvertime: TimeInterval {
+        didSet { UserDefaults.standard.set(totalBreakOvertime, forKey: "totalBreakOvertime") }
+    }
+
+    // MARK: - Private
+
     private var timerSource: Timer?
-    private var startDate: Date?
-    private var timeRemainingOnStart: TimeInterval = 0
+    private var cycleEndDate: Date?   // absolute moment the cycle should end
+    private var pauseDate: Date?      // moment we paused (nil when running)
     private var totalDuration: TimeInterval
+
+    // MARK: - Init
 
     init() {
         let d = UserDefaults.standard
-        let work     = d.object(forKey: "workDuration") as? TimeInterval ?? 25 * 60
-        let short    = d.object(forKey: "shortBreakDuration") as? TimeInterval ?? 5 * 60
-        let long     = d.object(forKey: "longBreakDuration") as? TimeInterval ?? 15 * 60
-        let sessions = d.object(forKey: "sessionsUntilLongBreak") as? Int ?? 4
-        let auto     = d.object(forKey: "autoStart") as? Bool ?? false
+        let work     = d.object(forKey: "workDuration")           as? TimeInterval ?? 25 * 60
+        let short    = d.object(forKey: "shortBreakDuration")     as? TimeInterval ?? 5 * 60
+        let long     = d.object(forKey: "longBreakDuration")      as? TimeInterval ?? 15 * 60
+        let sessions = d.object(forKey: "sessionsUntilLongBreak") as? Int          ?? 4
+        let auto     = d.object(forKey: "autoStart")              as? Bool         ?? false
+        let wOT      = d.object(forKey: "totalWorkOvertime")      as? TimeInterval ?? 0
+        let bOT      = d.object(forKey: "totalBreakOvertime")     as? TimeInterval ?? 0
 
-        self.workDuration            = work
-        self.shortBreakDuration      = short
-        self.longBreakDuration       = long
-        self.sessionsUntilLongBreak  = sessions
-        self.autoStart               = auto
-        self.timeRemaining           = work
-        self.totalDuration           = work
+        self.workDuration           = work
+        self.shortBreakDuration     = short
+        self.longBreakDuration      = long
+        self.sessionsUntilLongBreak = sessions
+        self.autoStart              = auto
+        self.totalWorkOvertime      = wOT
+        self.totalBreakOvertime     = bOT
+        self.timeRemaining          = work
+        self.totalDuration          = work
     }
+
+    // MARK: - Computed
 
     var currentCycleDuration: TimeInterval {
         switch currentCycle {
@@ -63,16 +89,45 @@ final class PomodoroTimer: ObservableObject {
     }
 
     var formattedTime: String {
+        if isOvertime {
+            let secs = Int(overtimeSeconds)
+            return String(format: "+%02d:%02d", secs / 60, secs % 60)
+        }
         let total = Int(ceil(timeRemaining))
         return String(format: "%02d:%02d", total / 60, total % 60)
     }
+
+    // Preview the next cycle without mutating state (used for notification on overtime entry)
+    private var peekNextCycle: CycleType {
+        switch currentCycle {
+        case .work:
+            let next = completedSessions + 1
+            guard sessionsUntilLongBreak > 0 else { return .shortBreak }
+            return (next % sessionsUntilLongBreak == 0) ? .longBreak : .shortBreak
+        case .shortBreak, .longBreak:
+            return .work
+        }
+    }
+
+    // MARK: - Public controls
 
     func togglePlayPause() { isRunning ? pause() : start() }
 
     func start() {
         guard !isRunning else { return }
-        timeRemainingOnStart = timeRemaining
-        startDate = Date()
+
+        if let pd = pauseDate, let endDate = cycleEndDate {
+            // Resume: shift the end date forward by the time we were paused
+            // This works correctly both in normal mode and in overtime mode.
+            let pausedFor = Date().timeIntervalSince(pd)
+            cycleEndDate = endDate.addingTimeInterval(pausedFor)
+            pauseDate = nil
+        } else {
+            // Fresh start
+            pauseDate = nil
+            cycleEndDate = Date().addingTimeInterval(timeRemaining)
+        }
+
         isRunning = true
         timerSource = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in self?.tick() }
@@ -81,26 +136,49 @@ final class PomodoroTimer: ObservableObject {
     }
 
     func pause() {
+        guard isRunning else { return }
         isRunning = false
-        startDate = nil
+        pauseDate = Date()
         timerSource?.invalidate()
         timerSource = nil
     }
 
     func reset() {
-        pause()
+        isRunning = false
+        timerSource?.invalidate()
+        timerSource = nil
+        cycleEndDate = nil
+        pauseDate = nil
+        isOvertime = false
+        overtimeSeconds = 0
         timeRemaining = currentCycleDuration
         totalDuration = currentCycleDuration
         progress = 1.0
     }
 
     func skip() {
-        pause()
-        advance(countSession: false)
+        // Count session only if the timer reached 0 naturally (overtime was active)
+        let shouldCount = isOvertime && currentCycle == .work
+        accumulateOvertime()
+
+        isRunning = false
+        timerSource?.invalidate()
+        timerSource = nil
+        cycleEndDate = nil
+        pauseDate = nil
+        isOvertime = false
+        overtimeSeconds = 0
+
+        advance(countSession: shouldCount)
+        if autoStart { start() }
     }
 
     func applySettings() {
         if !isRunning {
+            cycleEndDate = nil
+            pauseDate = nil
+            isOvertime = false
+            overtimeSeconds = 0
             totalDuration = currentCycleDuration
             timeRemaining = currentCycleDuration
             progress = 1.0
@@ -110,20 +188,26 @@ final class PomodoroTimer: ObservableObject {
     // MARK: - Private
 
     private func tick() {
-        guard let start = startDate else { return }
-        let elapsed   = Date().timeIntervalSince(start)
-        let remaining = max(0, timeRemainingOnStart - elapsed)
-        timeRemaining = remaining
-        progress      = totalDuration > 0 ? remaining / totalDuration : 0
-        if remaining <= 0 { completeCycle() }
-    }
+        guard let endDate = cycleEndDate else { return }
 
-    private func completeCycle() {
-        pause()
-        playAlarm()
-        advance(countSession: currentCycle == .work)
-        scheduleNotification(for: currentCycle) // currentCycle is already the next one after advance()
-        if autoStart { start() }
+        // diff > 0: time still remaining. diff < 0: we're in overtime.
+        let diff = endDate.timeIntervalSinceNow
+
+        if diff > 0 {
+            timeRemaining = diff
+            progress = totalDuration > 0 ? diff / totalDuration : 0
+        } else {
+            timeRemaining = 0
+            progress = 0
+
+            if !isOvertime {
+                // First tick past 0 — enter overtime
+                isOvertime = true
+                playAlarm()
+                scheduleNotification(for: peekNextCycle)
+            }
+            overtimeSeconds = -diff   // diff is negative, so -diff is positive
+        }
     }
 
     private func advance(countSession: Bool) {
@@ -137,7 +221,17 @@ final class PomodoroTimer: ObservableObject {
         }
         totalDuration = currentCycleDuration
         timeRemaining = currentCycleDuration
-        progress      = 1.0
+        progress = 1.0
+    }
+
+    // Add current overtime to the running total before clearing it.
+    private func accumulateOvertime() {
+        guard isOvertime && overtimeSeconds > 0 else { return }
+        if currentCycle == .work {
+            totalWorkOvertime += overtimeSeconds
+        } else {
+            totalBreakOvertime += overtimeSeconds
+        }
     }
 
     private func playAlarm() {
@@ -145,10 +239,10 @@ final class PomodoroTimer: ObservableObject {
     }
 
     private func scheduleNotification(for next: CycleType) {
-        let content      = UNMutableNotificationContent()
-        content.title    = next == .work ? "¡A trabajar!" : "¡Tiempo!"
-        content.body     = next.rawValue
-        content.sound    = nil // NSSound ya maneja el audio
+        let content   = UNMutableNotificationContent()
+        content.title = next == .work ? "¡A trabajar!" : "¡Es hora de descansar!"
+        content.body  = next.rawValue
+        content.sound = nil
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.5, repeats: false)
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)

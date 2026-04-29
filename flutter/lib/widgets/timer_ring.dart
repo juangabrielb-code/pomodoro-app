@@ -22,11 +22,11 @@ class TimerRing extends StatelessWidget {
           ),
           Text(
             timer.formattedTime,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 48,
               fontWeight: FontWeight.w100,
               fontFamily: 'monospace',
-              color: wineDark,
+              color: timer.isOvertime ? wineMid : wineDark,
               letterSpacing: 2,
             ),
           ),
