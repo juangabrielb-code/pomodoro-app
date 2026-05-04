@@ -173,6 +173,26 @@ final class PomodoroTimer: ObservableObject {
         if autoStart { start() }
     }
 
+    func fullReset() {
+        isRunning = false
+        timerSource?.invalidate()
+        timerSource = nil
+        cycleEndDate = nil
+        pauseDate = nil
+        isOvertime = false
+        overtimeSeconds = 0
+
+        currentCycle = .work
+        timeRemaining = workDuration
+        totalDuration = workDuration
+        progress = 1.0
+
+        // didSet de cada @Published auto-persiste en UserDefaults
+        completedSessions = 0
+        totalWorkOvertime = 0
+        totalBreakOvertime = 0
+    }
+
     func applySettings() {
         if !isRunning {
             cycleEndDate = nil

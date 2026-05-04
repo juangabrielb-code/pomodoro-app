@@ -63,12 +63,74 @@ class HomeScreen extends StatelessWidget {
         ),
         const Spacer(),
         GestureDetector(
+          onTap: () => _confirmFullReset(context),
+          child: Icon(Icons.autorenew, color: wineDark.withAlpha(128), size: 20),
+        ),
+        const SizedBox(width: 16),
+        GestureDetector(
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const SettingsScreen()),
           ),
           child: Icon(Icons.tune_rounded, color: wineDark, size: 20),
         ),
       ],
+    );
+  }
+
+  void _confirmFullReset(BuildContext context) {
+    final timer = context.read<PomodoroTimer>();
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: greige,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        title: const Text(
+          'Reiniciar todo',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1,
+            color: wineDark,
+          ),
+        ),
+        content: const Text(
+          'Se borrarán las sesiones completadas y el tiempo extra acumulado.',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w300,
+            color: wineDark,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              'CANCELAR',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 2,
+                color: wineDark.withAlpha(153),
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              timer.fullReset();
+              Navigator.of(ctx).pop();
+            },
+            child: const Text(
+              'REINICIAR',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 2,
+                color: wineDark,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

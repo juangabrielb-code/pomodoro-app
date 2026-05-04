@@ -13,6 +13,7 @@ extension Color {
 struct ContentView: View {
     @EnvironmentObject var pomodoro: PomodoroTimer
     @State private var showSettings = false
+    @State private var showFullResetAlert = false
 
     var body: some View {
         ZStack {
@@ -52,6 +53,21 @@ struct ContentView: View {
                 .foregroundStyle(Color.wineMid)
 
             Spacer()
+
+            Button { showFullResetAlert = true } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 14, weight: .light))
+                    .foregroundStyle(Color.wineDark.opacity(0.50))
+            }
+            .buttonStyle(.plain)
+            .alert("Reiniciar todo", isPresented: $showFullResetAlert) {
+                Button("Cancelar", role: .cancel) {}
+                Button("Reiniciar", role: .destructive) { pomodoro.fullReset() }
+            } message: {
+                Text("Se borrarán las sesiones completadas y el tiempo extra acumulado.")
+            }
+
+            Spacer().frame(width: 16)
 
             Button { showSettings.toggle() } label: {
                 Image(systemName: "slider.horizontal.3")

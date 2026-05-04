@@ -196,6 +196,27 @@ class PomodoroTimer extends ChangeNotifier {
     if (autoStart) start();
   }
 
+  void fullReset() {
+    _isRunning = false;
+    _ticker?.cancel();
+    _ticker = null;
+    _cycleEndDate = null;
+    _pauseDate = null;
+    _isOvertime = false;
+    _overtimeElapsed = Duration.zero;
+
+    _currentCycle = CycleType.work;
+    _timeRemaining = Duration(minutes: workMinutes);
+    _totalDuration = Duration(minutes: workMinutes);
+
+    _completedSessions = 0;
+    totalWorkOvertime = Duration.zero;
+    totalBreakOvertime = Duration.zero;
+
+    saveSettings(); // fire-and-forget, igual que en _accumulateOvertime()
+    notifyListeners();
+  }
+
   void applySettings() {
     saveSettings();
     if (!_isRunning) {
