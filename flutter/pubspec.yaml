@@ -28,6 +28,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
   provider: ^6.1.2
   shared_preferences: ^2.3.2
   flutter_local_notifications: ^18.0.0
@@ -41,7 +44,8 @@ dev_dependencies:
 flutter_launcher_icons:
   image_path: "assets/icon/icon.png"
   android: true
-  ios: false
+  ios: true
+  remove_alpha_ios: true
   macos:
     generate: true
     image_path: "assets/icon/icon.png"
@@ -51,10 +55,7 @@ flutter_launcher_icons:
 
 # The following section is specific to Flutter packages.
 flutter:
-
-  # The following line ensures that the Material Icons font is
-  # included with your application, so that you can use the icons in
-  # the material Icons class.
+  generate: true
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:

@@ -1,0 +1,27 @@
+{
+  "@@locale": "es",
+
+  "cycleWork":       "TRABAJO",
+  "cycleShortBreak": "DESCANSO CORTO",
+  "cycleLongBreak":  "DESCANSO LARGO",
+
+  "resetAll":        "Reiniciar todo",
+  "resetAllMessage": "Se borrarán las sesiones completadas y el tiempo extra acumulado.",
+  "cancel":          "CANCELAR",
+  "reset":           "REINICIAR",
+
+  "settingsTitle":       "CONFIGURACIÓN",
+  "sessionsLabel":       "SESIONES ANTES DE DESCANSO LARGO",
+  "autoStartLabel":      "AUTO-INICIO",
+  "autoStartDesc":       "Iniciar el siguiente ciclo automáticamente",
+  "apply":               "APLICAR",
+  "minutes":             "{count} min",
+  "@minutes": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+
+  "notifWorkTitle":  "¡A trabajar!",
+  "notifBreakTitle": "¡Es hora de descansar!"
+}

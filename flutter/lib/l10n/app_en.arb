@@ -1,0 +1,27 @@
+{
+  "@@locale": "en",
+
+  "cycleWork":       "WORK",
+  "cycleShortBreak": "SHORT BREAK",
+  "cycleLongBreak":  "LONG BREAK",
+
+  "resetAll":        "Reset all",
+  "resetAllMessage": "Completed sessions and accumulated overtime will be cleared.",
+  "cancel":          "CANCEL",
+  "reset":           "RESET",
+
+  "settingsTitle":       "SETTINGS",
+  "sessionsLabel":       "SESSIONS BEFORE LONG BREAK",
+  "autoStartLabel":      "AUTO-START",
+  "autoStartDesc":       "Start next cycle automatically",
+  "apply":               "APPLY",
+  "minutes":             "{count} min",
+  "@minutes": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+
+  "notifWorkTitle":  "Time to work!",
+  "notifBreakTitle": "Time to rest!"
+}

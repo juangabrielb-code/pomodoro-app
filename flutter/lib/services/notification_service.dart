@@ -1,4 +1,7 @@
+import 'dart:io' show Platform;
+import 'package:flutter/material.dart' show Locale;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import '../l10n/app_localizations.dart';
 import '../models/pomodoro_timer.dart';
 
 class NotificationService {
@@ -21,10 +24,12 @@ class NotificationService {
   }
 
   static Future<void> showCycleComplete(CycleType next) async {
+    final l10n = _l10n();
+
     const androidDetails = AndroidNotificationDetails(
       'pomodoro_cycle',
       'Pomodoro',
-      channelDescription: 'Avisos de ciclo completado',
+      channelDescription: 'Cycle complete notifications',
       importance: Importance.high,
       priority: Priority.high,
       playSound: true,
@@ -35,11 +40,23 @@ class NotificationService {
       macOS: macosDetails,
     );
 
-    await _plugin.show(
-      0,
-      next == CycleType.work ? '¡A trabajar!' : '¡Tiempo!',
-      next.label,
-      details,
-    );
+    final title = next == CycleType.work ? l10n.notifWorkTitle : l10n.notifBreakTitle;
+    final body  = switch (next) {
+      CycleType.work       => l10n.cycleWork,
+      CycleType.shortBreak => l10n.cycleShortBreak,
+      CycleType.longBreak  => l10n.cycleLongBreak,
+    };
+
+    await _plugin.show(0, title, body, details);
+  }
+
+  // Resolves localization without a BuildContext using the device locale.
+  static AppLocalizations _l10n() {
+    try {
+      final tag = Platform.localeName.split('_').first;
+      return lookupAppLocalizations(Locale(tag));
+    } catch (_) {
+      return lookupAppLocalizations(const Locale('en'));
+    }
   }
 }

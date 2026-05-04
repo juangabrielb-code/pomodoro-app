@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../l10n/app_localizations.dart';
 import '../models/pomodoro_timer.dart';
 import '../theme.dart';
 
@@ -20,7 +21,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    final t = context.read<PomodoroTimer>();
+    final t  = context.read<PomodoroTimer>();
     _work      = t.workMinutes;
     _short     = t.shortBreakMinutes;
     _long      = t.longBreakMinutes;
@@ -30,17 +31,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _apply() {
     final t = context.read<PomodoroTimer>()
-      ..workMinutes           = _work
-      ..shortBreakMinutes     = _short
-      ..longBreakMinutes      = _long
+      ..workMinutes            = _work
+      ..shortBreakMinutes      = _short
+      ..longBreakMinutes       = _long
       ..sessionsUntilLongBreak = _sessions
-      ..autoStart             = _autoStart;
+      ..autoStart              = _autoStart;
     t.applySettings();
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: greige,
       body: SafeArea(
@@ -49,21 +51,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _header(context),
+              _header(context, l10n),
               const SizedBox(height: 20),
               const Divider(color: Color(0x33722F37)),
               const SizedBox(height: 24),
-              _durationRow('TRABAJO', _work, 1, 90, (v) => setState(() => _work = v)),
+              _durationRow(l10n.cycleWork,       _work,  1, 90, (v) => setState(() => _work  = v), l10n),
               const SizedBox(height: 20),
-              _durationRow('DESCANSO CORTO', _short, 1, 30, (v) => setState(() => _short = v)),
+              _durationRow(l10n.cycleShortBreak, _short, 1, 30, (v) => setState(() => _short = v), l10n),
               const SizedBox(height: 20),
-              _durationRow('DESCANSO LARGO', _long, 1, 60, (v) => setState(() => _long = v)),
+              _durationRow(l10n.cycleLongBreak,  _long,  1, 60, (v) => setState(() => _long  = v), l10n),
               const SizedBox(height: 20),
-              _sessionRow(),
+              _sessionRow(l10n),
               const SizedBox(height: 20),
-              _autoStartRow(),
+              _autoStartRow(l10n),
               const Spacer(),
-              _applyButton(),
+              _applyButton(l10n),
             ],
           ),
         ),
@@ -71,12 +73,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _header(BuildContext context) {
+  Widget _header(BuildContext context, AppLocalizations l10n) {
     return Row(
       children: [
-        const Text(
-          'CONFIGURACIÓN',
-          style: TextStyle(
+        Text(
+          l10n.settingsTitle,
+          style: const TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w600,
             letterSpacing: 3,
@@ -92,7 +94,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _durationRow(String label, int value, int min, int max, ValueChanged<int> onChange) {
+  Widget _durationRow(
+    String label,
+    int value,
+    int min,
+    int max,
+    ValueChanged<int> onChange,
+    AppLocalizations l10n,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -111,16 +120,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Expanded(
               child: SliderTheme(
                 data: SliderTheme.of(context).copyWith(
-                  activeTrackColor: wineDark,
-                  thumbColor: wineDark,
+                  activeTrackColor:   wineDark,
+                  thumbColor:         wineDark,
                   inactiveTrackColor: wineDark.withAlpha(40),
-                  overlayColor: wineDark.withAlpha(20),
-                  trackHeight: 2,
+                  overlayColor:       wineDark.withAlpha(20),
+                  trackHeight:        2,
                 ),
                 child: Slider(
-                  value: value.toDouble(),
-                  min: min.toDouble(),
-                  max: max.toDouble(),
+                  value:     value.toDouble(),
+                  min:       min.toDouble(),
+                  max:       max.toDouble(),
                   divisions: max - min,
                   onChanged: (v) => onChange(v.round()),
                 ),
@@ -130,7 +139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             SizedBox(
               width: 52,
               child: Text(
-                '$value min',
+                l10n.minutes(value),
                 textAlign: TextAlign.right,
                 style: const TextStyle(
                   fontSize: 13,
@@ -146,12 +155,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _sessionRow() {
+  Widget _sessionRow(AppLocalizations l10n) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'SESIONES ANTES DE DESCANSO LARGO',
+          l10n.sessionsLabel,
           style: TextStyle(
             fontSize: 8,
             fontWeight: FontWeight.w600,
@@ -165,16 +174,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Expanded(
               child: SliderTheme(
                 data: SliderTheme.of(context).copyWith(
-                  activeTrackColor: wineDark,
-                  thumbColor: wineDark,
+                  activeTrackColor:   wineDark,
+                  thumbColor:         wineDark,
                   inactiveTrackColor: wineDark.withAlpha(40),
-                  overlayColor: wineDark.withAlpha(20),
-                  trackHeight: 2,
+                  overlayColor:       wineDark.withAlpha(20),
+                  trackHeight:        2,
                 ),
                 child: Slider(
-                  value: _sessions.toDouble(),
-                  min: 2,
-                  max: 8,
+                  value:     _sessions.toDouble(),
+                  min:       2,
+                  max:       8,
                   divisions: 6,
                   onChanged: (v) => setState(() => _sessions = v.round()),
                 ),
@@ -200,14 +209,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _autoStartRow() {
+  Widget _autoStartRow(AppLocalizations l10n) {
     return Row(
       children: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'AUTO-INICIO',
+              l10n.autoStartLabel,
               style: TextStyle(
                 fontSize: 8,
                 fontWeight: FontWeight.w600,
@@ -217,24 +226,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 2),
             Text(
-              'Iniciar el siguiente ciclo automáticamente',
+              l10n.autoStartDesc,
               style: TextStyle(fontSize: 10, color: wineDark.withAlpha(128)),
             ),
           ],
         ),
         const Spacer(),
         Switch(
-          value: _autoStart,
-          onChanged: (v) => setState(() => _autoStart = v),
-          activeThumbColor: wineDark,
-          activeTrackColor: wineDark.withAlpha(180),
+          value:              _autoStart,
+          onChanged:          (v) => setState(() => _autoStart = v),
+          activeThumbColor:   wineDark,
+          activeTrackColor:   wineDark.withAlpha(180),
           inactiveTrackColor: wineDark.withAlpha(40),
         ),
       ],
     );
   }
 
-  Widget _applyButton() {
+  Widget _applyButton(AppLocalizations l10n) {
     return GestureDetector(
       onTap: _apply,
       child: Container(
@@ -244,10 +253,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           color: wineDark,
           borderRadius: BorderRadius.circular(6),
         ),
-        child: const Text(
-          'APLICAR',
+        child: Text(
+          l10n.apply,
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w600,
             letterSpacing: 3,

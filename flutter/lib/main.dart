@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import 'l10n/app_localizations.dart';
 import 'models/pomodoro_timer.dart';
 import 'services/notification_service.dart';
 import 'screens/home_screen.dart';
@@ -28,6 +30,16 @@ class PomodoroApp extends StatelessWidget {
       title: 'Pomodoro',
       debugShowCheckedModeBanner: false,
       theme: appTheme,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('en'),
+        Locale('es'),
+      ],
       home: const HomeScreen(),
     );
   }
